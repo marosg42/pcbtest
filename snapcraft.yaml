@@ -12,6 +12,8 @@ grade: stable
 # https://forum.snapcraft.io/t/python-multiprocessing-sem-open-blocked-in-strict-mode/962
 confinement: strict
 
+architectures: [amd64, i386]
+
 environment:
   PATH: $SNAP/bin:$SNAP/usr/bin:$PATH # :$SNAP/testrepository:
   PYTHONPATH: $SNAP/lib/python3.6/site-packages:$SNAP/bin/rally
