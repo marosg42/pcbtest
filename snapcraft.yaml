@@ -5,62 +5,41 @@ description: |
   Snap for running tests for Openstack platform using Rally framework, Tempest verifier and tests from refstack.
 base: core18
 grade: stable
-# classic confinement is used as rally uses the 'multiprocessing' python module
-# which uses  shared memory and accesses paths blocked via AppArmor policies of
-# snapd which leads to segfaults when any of the rally tools are used
-# see https://bugs.launchpad.net/snapcraft/+bug/1577514
-# https://forum.snapcraft.io/t/python-multiprocessing-sem-open-blocked-in-strict-mode/962
 confinement: strict
 
 architectures: [amd64]
 
 environment:
-  PATH: $SNAP/bin:$SNAP/usr/bin:$PATH # :$SNAP/testrepository:
+  PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
   PYTHONPATH: $SNAP/lib/python3.6/site-packages:$SNAP/bin/rally
-  # see
-  # https://github.com/GoogleCloudPlatform/google-auth-library-python/issues/249
-  # https://github.com/ubuntu/ubuntu-make/issues/536#issuecomment-382112564
-  # https://www.python.org/dev/peps/pep-0420/
   PYTHONHOME: $SNAP/usr
   SNAP_SHM_PREFIX: "snap.${SNAP_NAME}."
 apps:
-  fcbtest:
-    command: echo "Usage - 0) SOURCE YOUR NOVARC 1)fcbtest.rallyinit 2) fcbtest.tempestinit 3) fcbtest.rally verify start"
-    plugs: [home, network, network-bind]
+  pcbtest:
+    command: /bin/echo -e "Usage -\n 0) source novarc\n 1) pcbtest.rallyinit\n 2) pcbtest.tempestinit\n 3) pcbtest.rally verify start"
+    plugs: [home, network]
   rally:
     command: rally
-    plugs: [home, network, network-bind]
+    plugs: [home, network]
   rallyinit:
     command: bin/rallyinit.sh
-    plugs: [home, network, network-bind] 
+    plugs: [home, network]
   tempestinit:
     command: bin/tempestinit.sh
-    plugs: [home, network, network-bind]
+    plugs: [home, network]
 
 parts:
-  patches:
-    source: patches
-    plugin: dump
-    prime:
-      - -*
   rally-openstack:
-    # python3 compatibility patches for tempest verifier
-    after: [patches]
     plugin: python
     python-version: python3
     build-packages: [python3, python3-pip, build-essential, libffi-dev, libpq-dev, libssl-dev, libxml2-dev, libxslt1-dev, python3-dev, iputils-ping, zlib1g, libcomerr2, libgcc1]
     source: https://github.com/openstack/rally-openstack
     source-branch: master
     source-type: git
+    stage-packages:
+      - git
     requirements: [requirements.txt]
     constraints: [upper-constraints.txt]
-    stage-packages:
-      - git # for tempest repository cloning
-    override-pull: |
-      snapcraftctl pull
-      git config user.email "builder@snapcraft.io"
-      git config user.name "builder@snapcraft.io"
-      # git am $SNAPCRAFT_STAGE/0001-py3-use-binary-mode-for-opening-image-files.patch
   copy-parts:
     after: [rally-openstack]
     plugin: dump
@@ -81,3 +60,30 @@ parts:
       stage:
           - -meta
           - -snap
+  tempest:
+    after: [rally-openstack]
+    plugin: python
+    source: https://opendev.org/openstack/tempest
+    source-type: git
+    requirements: [requirements.txt]
+    filesets:
+      exclude-conflicting-files:
+        - -lib/python3.6/site-packages/importlib_metadata/__init__.py
+        - -lib/python3.6/site-packages/importlib_metadata/_compat.py
+        - -lib/python3.6/site-packages/importlib_metadata/docs/changelog.rst
+        - -lib/python3.6/site-packages/importlib_metadata/docs/using.rst
+        - -lib/python3.6/site-packages/importlib_metadata/tests/fixtures.py
+        - -lib/python3.6/site-packages/importlib_metadata/tests/test_main.py
+        - -lib/python3.6/site-packages/importlib_metadata/tests/test_zip.py
+      include-all:
+        - ./*
+    stage:
+      - $include-all
+      - $exclude-conflicting-files
+    # rally expects tempest source with .git present
+    # which means we have to clone the repo into the
+    # target directory, including the hidden dir
+    override-prime: |
+      snapcraftctl prime
+      rm -fr $SNAPCRAFT_PRIME/tempest
+      git clone $SNAPCRAFT_PART_SRC $SNAPCRAFT_PRIME/tempest
